@@ -1,6 +1,6 @@
 #include <func.h>
 #define MAX_CONNECT 3
-#define TIMEOUT 20
+#define TIMEOUT 10
 
 //服务器端:使用epoll
 //带有超时踢出功能，20秒不发言，则服务器关闭该客户端的连接
@@ -12,14 +12,14 @@ int main(void)
     if(listenfd == -1){
         error(1, errno, "socket");
     }
-    
+
     //填充网络地址
     struct sockaddr_in serveraddr;
     memset(&serveraddr, 0, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_port = htons(8080);
     serveraddr.sin_addr.s_addr = inet_addr("192.168.248.136");
-    
+
     //设置套接字属性，网络地址可重用
     int on = 1; //1表示有效
     int ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
@@ -39,7 +39,7 @@ int main(void)
         error(1, errno, "listen");
     }
     printf("server start listening.\n");
-    
+
     //创建epoll的实例
     int epfd = epoll_create1(0);
     if(epfd == -1){
@@ -62,7 +62,7 @@ int main(void)
 
     //对IO事件进行循环监听
     while(1){
-        int n = epoll_wait(epfd, events, MAX_CONNECT, 1000); //n为已就绪的事件数
+        int n = epoll_wait(epfd, events, MAX_CONNECT, 1000); //每隔一秒,判断一次超时
 
         if(n == -1 && errno == EINTR){
             continue;
@@ -70,22 +70,22 @@ int main(void)
             perror("epoll_wait");
             break;
         }else if(n == 0){
-            //检查超时
-            time_t now = time(NULL);
+            //超时处理
+            time_t curTime = time(NULL);
             for(int i = 0; i < MAX_CONNECT; i++){
-                if(conns[i] > 0 && (now - last_active[i] >= TIMEOUT)){
-                    printf("peerfd = %d timed out.\n", conns[i]);
-                    ev.data.fd = conns[i];
-                    
+                if(conns[i] > 0 && (curTime - last_active[i] >= TIMEOUT)){
                     //发送超时通知给客户端
+                    printf("peerfd = %d timed out.\n", conns[i]);
                     const char *timeout_msg = "超时未发言，您已被踢出聊天室。\n";
                     send(conns[i], timeout_msg, strlen(timeout_msg), 0);
-                    
+
                     //从监听的红黑树删除
+                    ev.data.fd = conns[i];
                     ret = epoll_ctl(epfd, EPOLL_CTL_DEL, conns[i], &ev);
                     if(ret == -1){
                         error(1, errno, "epoll_ctl");
                     }
+
                     close(conns[i]); //关闭超时的peerfd
                     conns[i] = 0;    //标记为可用
                 }
@@ -101,7 +101,7 @@ int main(void)
                 struct sockaddr_in client_addr;
                 memset(&client_addr, 0, sizeof(client_addr));
                 socklen_t len = sizeof(client_addr);
-                
+
                 //服务器接收客户端的connect连接请求
                 int peerfd = accept(listenfd, (struct sockaddr*)&client_addr, &len);
                 if(peerfd == -1){
@@ -119,7 +119,7 @@ int main(void)
                 if(ret == -1){
                     error(1, errno, "epoll_ctl");
                 }
-                
+
                 //存储已建立好的连接
                 for(int i = 0; i < MAX_CONNECT; i++){
                     if(conns[i] == 0){
@@ -158,7 +158,8 @@ int main(void)
                             }
                         }
                         continue;
-                    }else
+                    }
+                    else
                     {
                         printf("ret:%d bytes, msg:%s",ret, buff);
                         //更新活跃时间
@@ -173,11 +174,9 @@ int main(void)
                             if(conns[j] > 0 && conns[j] != fd){ //不发送给自己
                                 send(conns[j], buff, ret, 0);
                             }
-
                         }
                     }
                 }
-
             }
         }
     }
