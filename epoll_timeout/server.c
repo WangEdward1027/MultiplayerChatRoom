@@ -4,6 +4,12 @@
 
 //服务器端:使用epoll
 //带有超时踢出功能，20秒不发言，则服务器关闭该客户端的连接
+//结构体保存上次发言时间
+
+typedef struct conn_s {
+    int peerfd;         //保存与对端进行交互的peerfd
+    int lastActiveTime; //保存该连接上一次通信的时间(秒)
+} conn_info_t;
 
 int main(void)
 {
@@ -57,8 +63,10 @@ int main(void)
     }
 
     struct epoll_event events[MAX_CONNECT];
-    int conns[MAX_CONNECT] = {0};
-    time_t last_active[MAX_CONNECT] = {0}; //记录每个客户端最后活跃的时间
+    conn_info_t conns[MAX_CONNECT] = {0};
+    
+    /* int conns[MAX_CONNECT] = {0}; */
+    /* time_t last_active[MAX_CONNECT] = {0}; //记录每个客户端最后活跃的时间 */
 
     //对IO事件进行循环监听
     while(1){
@@ -73,21 +81,23 @@ int main(void)
             //超时处理
             time_t curTime = time(NULL);
             for(int i = 0; i < MAX_CONNECT; i++){
-                if(conns[i] > 0 && (curTime - last_active[i] >= TIMEOUT)){
+                if(conns[i].peerfd > 0 && (curTime - conns[i].lastActiveTime >= TIMEOUT)){
                     //发送超时通知给客户端
-                    printf("peerfd = %d timed out.\n", conns[i]);
+                    printf("peerfd = %d timed out.\n", conns[i].peerfd);
                     const char *timeout_msg = "超时未发言，您已被踢出聊天室。\n";
-                    send(conns[i], timeout_msg, strlen(timeout_msg), 0);
+                    send(conns[i].peerfd, timeout_msg, strlen(timeout_msg), 0);
 
                     //从监听的红黑树删除
-                    ev.data.fd = conns[i];
-                    ret = epoll_ctl(epfd, EPOLL_CTL_DEL, conns[i], &ev);
+                    ev.data.fd = conns[i].peerfd;
+                    ret = epoll_ctl(epfd, EPOLL_CTL_DEL, conns[i].peerfd, &ev);
                     if(ret == -1){
                         error(1, errno, "epoll_ctl");
                     }
 
-                    close(conns[i]); //关闭超时的peerfd
-                    conns[i] = 0;    //标记为可用
+                    close(conns[i].peerfd); //关闭超时的peerfd
+                    //清空peerfd的记录
+                    conns[i].peerfd = 0;    //标记为可用
+                    conns[i].lastActiveTime = 0;
                 }
             }
             continue;
@@ -112,6 +122,7 @@ int main(void)
                 //将客户端的socket加入epoll
                 printf("%s:%d has connected.\n",
                        inet_ntoa(client_addr.sin_addr),ntohs(client_addr.sin_port));
+                
                 struct epoll_event ev;
                 ev.events = EPOLLIN;
                 ev.data.fd = peerfd;
@@ -122,9 +133,9 @@ int main(void)
 
                 //存储已建立好的连接
                 for(int i = 0; i < MAX_CONNECT; i++){
-                    if(conns[i] == 0){
-                        conns[i] = peerfd;
-                        last_active[i] = time(NULL); //记录活跃时间
+                    if(conns[i].peerfd == 0){
+                        conns[i].peerfd = peerfd;
+                        conns[i].lastActiveTime = time(NULL); //记录活跃时间
                         break;
                     }
                 }
@@ -149,14 +160,17 @@ int main(void)
                         if(ret == -1){
                             error(1, errno, "epoll_ctl");
                         }
-                        close(fd); //关闭peerfd
-                        printf("peerfd = %d has left.\n",fd);
+                        //更新conns中的信息
                         for(int i = 0; i < MAX_CONNECT; i++){
-                            if(conns[i] == fd){
-                                conns[i] = 0; //标记为可用
+                            if(conns[i].peerfd == fd){
+                                conns[i].peerfd = 0; //标记为可用
+                                conns[i].lastActiveTime = 0;
                                 break;
                             }
                         }
+                        
+                        close(fd); //关闭peerfd
+                        printf("peerfd = %d has left.\n",fd);
                         continue;
                     }
                     else
@@ -164,15 +178,15 @@ int main(void)
                         printf("ret:%d bytes, msg:%s",ret, buff);
                         //更新活跃时间
                         for(int i = 0; i < MAX_CONNECT; i++){
-                            if(conns[i] == fd){
-                                last_active[i] = time(NULL);
+                            if(conns[i].peerfd == fd){
+                                conns[i].lastActiveTime = time(NULL);
                                 break;
                             }
                         }
-                        //服务器群发消息给其他客户端
+                        //服务器将消息转发给其他客户端
                         for(int j = 0; j < MAX_CONNECT; j++){
-                            if(conns[j] > 0 && conns[j] != fd){ //不发送给自己
-                                send(conns[j], buff, ret, 0);
+                            if(conns[j].peerfd > 0 && conns[j].peerfd != fd){ //不发送给自己
+                                send(conns[j].peerfd, buff, ret, 0);
                             }
                         }
                     }
