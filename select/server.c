@@ -1,6 +1,6 @@
 #include <func.h>
 
-//服务器端:一对一聊天
+//服务器端:一对一聊天，基于TCP协议：socket、bind、listen、accept、recv、send、close
 //使用select监听stdin和客户端
 
 int main(void)
@@ -18,7 +18,7 @@ int main(void)
     serveraddr.sin_port = htons(8080);
     serveraddr.sin_addr.s_addr = inet_addr("192.168.248.136");
     
-    //设置套接字属性，网络地址可重用
+    //设置网络地址可重用(套接字属性)，服务器主动断开连接，无需等待2MSL时间便可重用IP地址
     int on = 1; //1表示有效
     int ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
     if(ret == -1){
