@@ -6,10 +6,9 @@ int main(void)
 {
     //创建客户端套接字
     int clientfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(clientfd == -1){
-        error(1, errno, "socket");
-    }
+    if(clientfd == -1)    error(1, errno, "socket");
 
+    //填充网络地址
     struct sockaddr_in clientaddr;
     memset(&clientaddr, 0, sizeof(clientaddr)); //初始化
     clientaddr.sin_family = AF_INET;
@@ -18,9 +17,7 @@ int main(void)
     
     //客户端发起连接请求:connect
     int ret = connect(clientfd,(const struct sockaddr *)&clientaddr, sizeof(clientaddr));
-    if(ret == -1){
-        error(1, errno, "connect");
-    }
+    if(ret == -1)    error(1, errno, "connect");
     printf("connect to server success\n");
  
     fd_set readset; //读集合
@@ -39,11 +36,8 @@ int main(void)
             memset(buff, 0, sizeof(buff));
             //从标准输入缓冲区获取数据
             int ret = read(STDIN_FILENO, buff, sizeof(buff));
-            if(ret == 0){
-                break;
-            }
-            printf("read ret: %d, ",ret);
-
+            if(ret == 0)    break;  //按下crtl + D
+            printf("read stdin %d bytes, ", ret);
             //发送给对端
             ret = send(clientfd, buff, strlen(buff), 0);
             printf("send %d bytes.\n",ret);
@@ -54,11 +48,8 @@ int main(void)
             memset(buff, 0, sizeof(buff));
             //从对端获取数据
             int ret = recv(clientfd, buff, sizeof(buff), 0);
-            if(ret == 0){
-                //连接已经断开了
-                break;
-            }
-            printf("recv msg: %s", buff);
+            if(ret == 0)    break;    //recv的返回值为0,说明连接已经断开
+            printf("recv msg from server: %s", buff);
         }
     }
     printf("对方已离开聊天室.\n");
