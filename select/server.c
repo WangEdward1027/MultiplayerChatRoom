@@ -30,7 +30,6 @@ int main(void)
     ret = listen(listenfd, 10);
     if(ret == -1)   error(1, errno, "listen");
     printf("server start listening.\n");
-
     
     //接收客户端的连接请求(阻塞)
     struct sockaddr_in clientaddr;
@@ -56,7 +55,10 @@ int main(void)
             memset(buff, 0, sizeof(buff));
             //从标准输出获取数据
             ret = read(STDIN_FILENO, buff, sizeof(buff));
-            if(ret == 0)    break;  //read返回值为0,说明按下了crtl + D
+            if(ret == 0){
+                printf("您已离开聊天室。\n");
+                break;//read返回值为0,说明按下了crtl + D
+            }   
             printf("read stdin %d bytes, ",ret);
             //发送给对端
             ret = send(peerfd, buff, strlen(buff), 0);
@@ -68,14 +70,15 @@ int main(void)
             memset(buff, 0, sizeof(buff));
             //从对端获取数据
             ret = recv(peerfd, buff, sizeof(buff), 0);
-            if(ret == 0)    break;  //recv返回值为0,说明连接已经断开
+            if(ret == 0){
+                printf("对方已离开聊天室。\n");
+                break;  //recv返回值为0,说明连接已经断开
+            }    
             printf("recv msg from client: %s", buff);
         }
     }
-    printf("对方已离开聊天室。\n");
-
-    close(listenfd);
     close(peerfd);
+    close(listenfd);
 
     return 0;
 }
