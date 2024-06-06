@@ -36,7 +36,10 @@ int main(void)
             memset(buff, 0, sizeof(buff));
             //从标准输入缓冲区获取数据
             int ret = read(STDIN_FILENO, buff, sizeof(buff));
-            if(ret == 0)    break;  //按下crtl + D
+            if(ret == 0){
+                printf("您已离开聊天室。\n");
+                break;  //按下crtl + D
+            }    
             printf("read stdin %d bytes, ", ret);
             //发送给对端
             ret = send(clientfd, buff, strlen(buff), 0);
@@ -48,12 +51,13 @@ int main(void)
             memset(buff, 0, sizeof(buff));
             //从对端获取数据
             int ret = recv(clientfd, buff, sizeof(buff), 0);
-            if(ret == 0)    break;    //recv的返回值为0,说明连接已经断开
+            if(ret == 0){
+                printf("对方已离开聊天室.\n");
+                break;    //recv的返回值为0,说明连接已经断开
+            } 
             printf("recv msg from server: %s", buff);
         }
     }
-    printf("对方已离开聊天室.\n");
-
     close(clientfd);
 
     return 0;
