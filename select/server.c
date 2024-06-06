@@ -30,8 +30,9 @@ int main(void)
     ret = listen(listenfd, 10);
     if(ret == -1)   error(1, errno, "listen");
     printf("server start listening.\n");
+
     
-    //接收服务器的连接请求(阻塞)
+    //接收客户端的连接请求(阻塞)
     struct sockaddr_in clientaddr;
     memset(&clientaddr, 0, sizeof(clientaddr));
     socklen_t len = sizeof(clientaddr);
